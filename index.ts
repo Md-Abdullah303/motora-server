@@ -52,6 +52,10 @@ function getPaymentsCollection(): Collection {
   return getDb().collection("payments")
 }
 
+function getUsersCollection(): Collection {
+  return getDb().collection("users")
+}
+
 // ──────────────────────────────────────────────
 // 3. Jose-CJS JWT Middleware (future-ready)
 // ──────────────────────────────────────────────
@@ -505,6 +509,119 @@ app.get("/api/users/me/stats", authMiddleware, async (req: Request, res: Respons
     })
   } catch (err) {
     console.error("[GET /api/users/me/stats] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
+// ──────────────────────────────────────────────
+// Profile, Car Edit & Delete Routes
+// ──────────────────────────────────────────────
+
+// GET user profile
+app.get("/api/users/me", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    const profile = await getUsersCollection().findOne({ id: user.sub })
+    sendSuccess(res, profile || {})
+  } catch (err) {
+    console.error("[GET /api/users/me] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
+// PATCH user profile
+app.patch("/api/users/me", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    const { name, phone, location, gender, avatar } = req.body
+
+    const updateFields: Record<string, any> = {}
+    if (name !== undefined) updateFields.name = name
+    if (phone !== undefined) updateFields.phone = phone
+    if (location !== undefined) updateFields.location = location
+    if (gender !== undefined) updateFields.gender = gender
+    if (avatar !== undefined) updateFields.avatar = avatar
+    updateFields.updatedAt = new Date()
+
+    const result = await getUsersCollection().findOneAndUpdate(
+      { id: user.sub },
+      { $set: updateFields },
+      { upsert: true, returnDocument: "after" }
+    )
+
+    sendSuccess(res, result)
+  } catch (err) {
+    console.error("[PATCH /api/users/me] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
+// PUT car (edit)
+app.put("/api/cars/:id", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    const { id } = req.params
+
+    if (!ObjectId.isValid(id)) {
+      sendError(res, "Invalid car ID", 400)
+      return
+    }
+
+    // Ensure the car belongs to this user
+    const existing = await getCarsCollection().findOne({ _id: new ObjectId(id), userId: user.sub })
+    if (!existing) {
+      sendError(res, "Car not found or unauthorized", 404)
+      return
+    }
+
+    const { title, price, category, year, mileage, fuel, shortDescription, description, images } = req.body
+
+    const updateFields: Record<string, any> = {}
+    if (title !== undefined) updateFields.title = title
+    if (price !== undefined) updateFields.price = Number(price)
+    if (category !== undefined) updateFields.category = category
+    if (year !== undefined) updateFields.year = Number(year)
+    if (mileage !== undefined) updateFields.mileage = mileage
+    if (fuel !== undefined) updateFields.fuel = fuel
+    if (shortDescription !== undefined) updateFields.shortDescription = shortDescription
+    if (description !== undefined) updateFields.description = description
+    if (images !== undefined) updateFields.images = images
+    updateFields.updatedAt = new Date()
+
+    const result = await getCarsCollection().findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: updateFields },
+      { returnDocument: "after" }
+    )
+
+    sendSuccess(res, result)
+  } catch (err) {
+    console.error("[PUT /api/cars/:id] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
+// DELETE car
+app.delete("/api/cars/:id", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    const { id } = req.params
+
+    if (!ObjectId.isValid(id)) {
+      sendError(res, "Invalid car ID", 400)
+      return
+    }
+
+    const result = await getCarsCollection().deleteOne({ _id: new ObjectId(id), userId: user.sub })
+
+    if (result.deletedCount === 0) {
+      sendError(res, "Car not found or unauthorized", 404)
+      return
+    }
+
+    sendSuccess(res, { message: "Car deleted successfully" })
+  } catch (err) {
+    console.error("[DELETE /api/cars/:id] Error:", err)
     sendError(res, err instanceof Error ? err.message : "Internal server error")
   }
 })
