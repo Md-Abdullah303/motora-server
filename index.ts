@@ -209,10 +209,15 @@ const app = express()
 app.use(cors())
 app.use(express.json({ limit: "10mb" }))
 
+import { aiRoutes } from "./routes/aiRoutes"
+
 // Health check
 app.get("/api/health", (_req: Request, res: Response) => {
   sendSuccess(res, { status: "ok", timestamp: new Date().toISOString() })
 })
+
+// AI Routes
+app.use("/api/ai", aiRoutes)
 
 // ──────────────────────────────────────────────
 // 7. Core Feature: Cars API (GET & POST)
