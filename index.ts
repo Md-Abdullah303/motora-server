@@ -257,6 +257,31 @@ app.get("/api/cars", async (req: Request, res: Response) => {
   }
 })
 
+import { ObjectId } from "mongodb"
+
+app.get("/api/cars/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    if (!ObjectId.isValid(id)) {
+      sendError(res, "Invalid car ID format", 400)
+      return
+    }
+
+    const collection = getCarsCollection()
+    const car = await collection.findOne({ _id: new ObjectId(id) })
+
+    if (!car) {
+      sendError(res, "Car not found", 404)
+      return
+    }
+
+    sendSuccess(res, car)
+  } catch (err) {
+    console.error("[GET /api/cars/:id] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
 app.post("/api/cars", authMiddleware, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user
