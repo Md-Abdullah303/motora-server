@@ -200,6 +200,17 @@ const app = express()
 app.use(cors())
 app.use(express.json({ limit: "10mb" }))
 
+// Ensure DB Connection (Required for Serverless/Vercel)
+app.use(async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    await connectDatabase()
+    next()
+  } catch (error) {
+    console.error("Database connection error:", error)
+    res.status(500).json({ success: false, error: "Database connection failed" })
+  }
+})
+
 // Root Route
 app.get("/", (_req: Request, res: Response) => {
   res.send("MOTORA API is running smoothly! 🚀")
