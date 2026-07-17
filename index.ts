@@ -1,10 +1,15 @@
 import express, { Request, Response, NextFunction } from "express"
 import cors from "cors"
 import dotenv from "dotenv"
-import { MongoClient, Db, Collection } from "mongodb"
+import { MongoClient, Db, Collection, ObjectId } from "mongodb"
 import * as jose from "jose-cjs"
+import Stripe from "stripe"
 
 dotenv.config()
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_mock", {
+  apiVersion: "2025-02-24.acacia" as any,
+})
 
 // ──────────────────────────────────────────────
 // 1. Configuration & Constants
@@ -41,6 +46,10 @@ function getCarsCollection(): Collection {
 
 function getCartCollection(): Collection {
   return getDb().collection("cart")
+}
+
+function getPaymentsCollection(): Collection {
+  return getDb().collection("payments")
 }
 
 // ──────────────────────────────────────────────
@@ -257,8 +266,6 @@ app.get("/api/cars", async (req: Request, res: Response) => {
   }
 })
 
-import { ObjectId } from "mongodb"
-
 app.get("/api/cars/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
@@ -372,6 +379,132 @@ app.post("/api/cart", authMiddleware, async (req: Request, res: Response) => {
     sendSuccess(res, { insertedId: result.insertedId, item: doc }, 201)
   } catch (err) {
     console.error("[POST /api/cart] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
+// ──────────────────────────────────────────────
+// Stripe Payments & User Stats Routes
+// ──────────────────────────────────────────────
+
+app.post("/api/create-checkout-session", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    const { carId } = req.body
+
+    if (!ObjectId.isValid(carId)) {
+      sendError(res, "Invalid car ID", 400)
+      return
+    }
+
+    const car = await getCarsCollection().findOne({ _id: new ObjectId(carId) })
+    if (!car) {
+      sendError(res, "Car not found", 404)
+      return
+    }
+
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000"
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: car.title,
+              description: car.shortDescription,
+              images: car.images && car.images.length > 0 ? [car.images[0]] : [],
+            },
+            unit_amount: Math.round(car.price * 100), // Stripe expects cents
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: `${clientUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${clientUrl}/payment/cancel`,
+      metadata: {
+        userId: user.sub,
+        carId: car._id.toString(),
+      }
+    })
+
+    sendSuccess(res, { url: session.url })
+  } catch (err) {
+    console.error("[POST /api/create-checkout-session] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
+app.get("/api/payments/verify", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    const { session_id } = req.query
+
+    if (!session_id || typeof session_id !== "string") {
+      sendError(res, "Missing session_id", 400)
+      return
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(session_id)
+    
+    if (session.payment_status === "paid") {
+      const paymentsCollection = getPaymentsCollection()
+      const carId = session.metadata?.carId
+
+      // Check if payment already exists to prevent duplicate entries on reload
+      const existingPayment = await paymentsCollection.findOne({ stripeSessionId: session.id })
+      if (!existingPayment) {
+        await paymentsCollection.insertOne({
+          userId: user.sub,
+          stripeSessionId: session.id,
+          amount: (session.amount_total || 0) / 100, // convert back from cents
+          currency: session.currency,
+          carId: carId,
+          status: session.payment_status,
+          createdAt: new Date()
+        })
+      }
+      sendSuccess(res, { message: "Payment verified successfully" })
+    } else {
+      sendError(res, "Payment not completed", 400)
+    }
+  } catch (err) {
+    console.error("[GET /api/payments/verify] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
+app.get("/api/users/me/payments", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    const payments = await getPaymentsCollection().find({ userId: user.sub }).sort({ createdAt: -1 }).toArray()
+    sendSuccess(res, payments)
+  } catch (err) {
+    console.error("[GET /api/users/me/payments] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
+app.get("/api/users/me/stats", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    
+    const [carsCount, payments] = await Promise.all([
+      getCarsCollection().countDocuments({ userId: user.sub }),
+      getPaymentsCollection().find({ userId: user.sub }).toArray()
+    ])
+
+    const totalSpent = payments.reduce((sum, payment) => sum + (payment.amount || 0), 0)
+
+    sendSuccess(res, {
+      totalCarsListed: carsCount,
+      totalPaymentsMade: payments.length,
+      totalSpent: totalSpent
+    })
+  } catch (err) {
+    console.error("[GET /api/users/me/stats] Error:", err)
     sendError(res, err instanceof Error ? err.message : "Internal server error")
   }
 })
