@@ -29,7 +29,9 @@ async function connectDatabase(): Promise<Db> {
 }
 
 function getDb(): Db {
-  if (!cachedDb) throw new Error("Database not initialized. Call connectDatabase() first.")
+  if (!cachedDb) {
+    throw new Error("Database is not connected. Check your MONGODB_URI and ensure MongoDB is running.")
+  }
   return cachedDb
 }
 
@@ -200,15 +202,21 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // ──────────────────────────────────────────────
 
 async function start(): Promise<void> {
+  app.listen(PORT, () => {
+    console.log(`╔══════════════════════════════════════════════╗`)
+    console.log(`║      MOTORA API Server is RUNNING           ║`)
+    console.log(`║      Port: ${PORT}                          ║`)
+    console.log(`║      URL : http://localhost:${PORT}                 ║`)
+    console.log(`║      Health: http://localhost:${PORT}/api/health    ║`)
+    console.log(`╚══════════════════════════════════════════════╝`)
+  })
+
   try {
     await connectDatabase()
-    app.listen(PORT, () => {
-      console.log(`[Server] MOTORA API running → http://localhost:${PORT}`)
-      console.log(`[Server] Health check → http://localhost:${PORT}/api/health`)
-    })
+    console.log(`[DB] MongoDB connected successfully`)
   } catch (err) {
-    console.error("[Server] Failed to start:", err)
-    process.exit(1)
+    console.warn(`[DB] Warning: MongoDB not available — server is running but DB features will fail`)
+    console.warn(`[DB] Make sure MONGODB_URI is set correctly in .env`)
   }
 }
 
