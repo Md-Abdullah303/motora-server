@@ -32,10 +32,16 @@ router.post("/chat", async (req, res) => {
     });
 
     // Build chat history (exclude last message since we send it separately)
-    const history = messages.slice(0, -1).map((msg: any) => ({
+    let history = messages.slice(0, -1).map((msg: any) => ({
       role: msg.role === "user" ? "user" : "model",
       parts: [{ text: msg.parts?.[0]?.text || "" }],
     }));
+
+    // Gemini API requires the history to start with a 'user' message. 
+    // If our hardcoded welcome message is at the top, we must drop it.
+    while (history.length > 0 && history[0].role !== "user") {
+      history.shift();
+    }
 
     const chat = model.startChat({ history });
 

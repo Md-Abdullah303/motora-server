@@ -84,11 +84,7 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   
   const token = authHeader.slice(7)
   
-  // Quick fallback for better-auth / development without JWT signing
-  if (token.startsWith("user_")) {
-    ;(req as any).user = { sub: token.replace("user_", "") }
-    return next()
-  }
+  // Enforce valid JWT signed by JWT_SECRET
 
   verifyToken(token)
     .then((payload) => {
@@ -277,13 +273,13 @@ app.get("/api/cars", async (req: Request, res: Response) => {
 app.get("/api/cars/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
-    if (!ObjectId.isValid(id)) {
+    if (!ObjectId.isValid(id as string)) {
       sendError(res, "Invalid car ID format", 400)
       return
     }
 
     const collection = getCarsCollection()
-    const car = await collection.findOne({ _id: new ObjectId(id) })
+    const car = await collection.findOne({ _id: new ObjectId(id as string) })
 
     if (!car) {
       sendError(res, "Car not found", 404)
@@ -566,13 +562,13 @@ app.put("/api/cars/:id", authMiddleware, async (req: Request, res: Response) => 
     const user = (req as any).user
     const { id } = req.params
 
-    if (!ObjectId.isValid(id)) {
+    if (!ObjectId.isValid(id as string)) {
       sendError(res, "Invalid car ID", 400)
       return
     }
 
     // Ensure the car belongs to this user
-    const existing = await getCarsCollection().findOne({ _id: new ObjectId(id), userId: user.sub })
+    const existing = await getCarsCollection().findOne({ _id: new ObjectId(id as string), userId: user.sub })
     if (!existing) {
       sendError(res, "Car not found or unauthorized", 404)
       return
@@ -593,7 +589,7 @@ app.put("/api/cars/:id", authMiddleware, async (req: Request, res: Response) => 
     updateFields.updatedAt = new Date()
 
     const result = await getCarsCollection().findOneAndUpdate(
-      { _id: new ObjectId(id) },
+      { _id: new ObjectId(id as string) },
       { $set: updateFields },
       { returnDocument: "after" }
     )
@@ -611,12 +607,12 @@ app.delete("/api/cars/:id", authMiddleware, async (req: Request, res: Response) 
     const user = (req as any).user
     const { id } = req.params
 
-    if (!ObjectId.isValid(id)) {
+    if (!ObjectId.isValid(id as string)) {
       sendError(res, "Invalid car ID", 400)
       return
     }
 
-    const result = await getCarsCollection().deleteOne({ _id: new ObjectId(id), userId: user.sub })
+    const result = await getCarsCollection().deleteOne({ _id: new ObjectId(id as string), userId: user.sub })
 
     if (result.deletedCount === 0) {
       sendError(res, "Car not found or unauthorized", 404)
