@@ -39,6 +39,10 @@ function getCarsCollection(): Collection {
   return getDb().collection("cars")
 }
 
+function getCartCollection(): Collection {
+  return getDb().collection("cart")
+}
+
 // ──────────────────────────────────────────────
 // 3. Jose-CJS JWT Middleware (future-ready)
 // ──────────────────────────────────────────────
@@ -65,7 +69,7 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   }
   verifyToken(authHeader.slice(7))
     .then((payload) => {
-      ;(req as any).user = payload
+      ; (req as any).user = payload
       next()
     })
     .catch(() => {
@@ -87,10 +91,10 @@ interface CarBody {
   aiTags: string[]
 }
 
-interface ValidationResult {
+interface ValidationResult<T = CarBody> {
   valid: boolean
   errors: string[]
-  data?: CarBody
+  data?: T
 }
 
 function validateCarBody(body: Record<string, unknown>): ValidationResult {
@@ -131,6 +135,33 @@ function validateCarBody(body: Record<string, unknown>): ValidationResult {
       category: body.category as string,
       images: body.images as string[],
       aiTags: body.aiTags as string[],
+    },
+  }
+}
+
+interface CartBody {
+  carId: string
+  quantity: number
+}
+
+function validateCartBody(body: Record<string, unknown>): ValidationResult<CartBody> {
+  const errors: string[] = []
+
+  if (!body.carId || typeof body.carId !== "string" || body.carId.trim().length === 0) {
+    errors.push("carId is required and must be a non-empty string")
+  }
+  if (body.quantity != null && (typeof body.quantity !== "number" || body.quantity < 1)) {
+    errors.push("quantity must be a positive number")
+  }
+
+  if (errors.length > 0) return { valid: false, errors }
+
+  return {
+    valid: true,
+    errors: [],
+    data: {
+      carId: (body.carId as string).trim(),
+      quantity: (body.quantity as number) || 1,
     },
   }
 }
@@ -188,6 +219,31 @@ app.post("/api/cars", async (req: Request, res: Response) => {
   }
 })
 
+app.post("/api/cart", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user
+    const validation = validateCartBody(req.body)
+
+    if (!validation.valid) {
+      sendError(res, validation.errors.join("; "), 400)
+      return
+    }
+
+    const doc = {
+      userId: user.sub,
+      carId: validation.data!.carId,
+      quantity: validation.data!.quantity,
+      createdAt: new Date(),
+    }
+
+    const result = await getCartCollection().insertOne(doc)
+    sendSuccess(res, { insertedId: result.insertedId, item: doc }, 201)
+  } catch (err) {
+    console.error("[POST /api/cart] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
 // ──────────────────────────────────────────────
 // 8. Global Error Handler
 // ──────────────────────────────────────────────
@@ -200,7 +256,6 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // ──────────────────────────────────────────────
 // 9. Start Server
 // ──────────────────────────────────────────────
-
 async function start(): Promise<void> {
   app.listen(PORT, () => {
     console.log(`╔══════════════════════════════════════════════╗`)
