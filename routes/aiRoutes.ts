@@ -25,7 +25,7 @@ router.post("/chat", async (req, res) => {
     }
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-3.5-flash",
       systemInstruction: `You are MOTORA AI, an expert automotive assistant for the MOTORA premium car marketplace. 
       You help users find cars, answer questions about luxury vehicles, supercars, and hypercars, and guide them through the platform.
       Keep your answers concise, professional, and helpful.`,
@@ -63,7 +63,7 @@ router.post("/generate-description", async (req, res) => {
       return res.status(400).json({ success: false, message: "Car title is required." });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
     const prompt = `Write a premium, engaging, and professional car listing description for a "${title}". 
     The car category is "${category || "luxury"}". 
