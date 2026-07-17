@@ -61,17 +61,10 @@ function getUsersCollection(): Collection {
 // 3. Jose-CJS JWT Middleware (future-ready)
 // ──────────────────────────────────────────────
 
-const jwks = jose.createLocalJWKSet({
-  keys: [
-    {
-      kty: "oct",
-      k: jose.base64url.encode(Buffer.from(JWT_SECRET)),
-    },
-  ],
-})
+const jwtSecretBytes = new TextEncoder().encode(JWT_SECRET)
 
 async function verifyToken(token: string): Promise<jose.JWTPayload> {
-  const { payload } = await jose.jwtVerify(token, jwks)
+  const { payload } = await jose.jwtVerify(token, jwtSecretBytes)
   return payload
 }
 
@@ -91,7 +84,8 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
       ; (req as any).user = payload
       next()
     })
-    .catch(() => {
+    .catch((err) => {
+      console.error("JWT Verification Error:", err);
       res.status(401).json({ error: "Invalid or expired token" })
     })
 }
