@@ -4,6 +4,7 @@ import dotenv from "dotenv"
 import { MongoClient, Db, Collection, ObjectId } from "mongodb"
 import * as jose from "jose-cjs"
 import Stripe from "stripe"
+import { aiRoutes } from "./routes/aiRoutes"
 
 dotenv.config()
 
@@ -208,8 +209,6 @@ const app = express()
 
 app.use(cors())
 app.use(express.json({ limit: "10mb" }))
-
-import { aiRoutes } from "./routes/aiRoutes"
 
 // Health check
 app.get("/api/health", (_req: Request, res: Response) => {
