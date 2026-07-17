@@ -285,8 +285,30 @@ app.post("/api/cars", authMiddleware, async (req: Request, res: Response) => {
 app.get("/api/users/me/cars", authMiddleware, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user
-    const cars = await getCarsCollection().find({ userId: user.sub }).sort({ createdAt: -1 }).toArray()
-    sendSuccess(res, cars)
+    const { page = "1", limit = "8" } = req.query
+    
+    const pageNum = Math.max(1, parseInt(page as string, 10))
+    const limitNum = Math.max(1, parseInt(limit as string, 10))
+    const skip = (pageNum - 1) * limitNum
+
+    const collection = getCarsCollection()
+    
+    const [cars, totalCars] = await Promise.all([
+      collection.find({ userId: user.sub }).sort({ createdAt: -1 }).skip(skip).limit(limitNum).toArray(),
+      collection.countDocuments({ userId: user.sub })
+    ])
+
+    const totalPages = Math.ceil(totalCars / limitNum)
+
+    sendSuccess(res, {
+      cars,
+      pagination: {
+        totalCars,
+        totalPages,
+        currentPage: pageNum,
+        limit: limitNum
+      }
+    })
   } catch (err) {
     console.error("[GET /api/users/me/cars] Error:", err)
     sendError(res, err instanceof Error ? err.message : "Internal server error")
