@@ -280,6 +280,17 @@ app.get("/api/cars", async (req: Request, res: Response) => {
   }
 })
 
+app.get("/api/cars/trending", async (req: Request, res: Response) => {
+  try {
+    // Trending: For now, just newest cars limited to 8
+    const cars = await getCarsCollection().find({}).sort({ createdAt: -1 }).limit(8).toArray()
+    sendSuccess(res, cars)
+  } catch (err) {
+    console.error("[GET /api/cars/trending] Error:", err)
+    sendError(res, err instanceof Error ? err.message : "Internal server error")
+  }
+})
+
 app.get("/api/cars/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
@@ -361,16 +372,7 @@ app.get("/api/users/me/cars", authMiddleware, async (req: Request, res: Response
   }
 })
 
-app.get("/api/cars/trending", async (req: Request, res: Response) => {
-  try {
-    // Trending: For now, just newest cars limited to 8
-    const cars = await getCarsCollection().find({}).sort({ createdAt: -1 }).limit(8).toArray()
-    sendSuccess(res, cars)
-  } catch (err) {
-    console.error("[GET /api/cars/trending] Error:", err)
-    sendError(res, err instanceof Error ? err.message : "Internal server error")
-  }
-})
+
 
 app.post("/api/cart", authMiddleware, async (req: Request, res: Response) => {
   try {
